@@ -28,7 +28,7 @@ You could do it manually in the [Azure Portal](https://portal.azure.com/).
 ### Run the app
 
 - In the command line, go to the project root folder **mslearn-retrieve-m365-data-with-msgraph-quickstart**.
-- Run below script in the command line. This will open your application in the browser with the url [http://localhost:8080](http://localhost:8080).
+- Run below script in the command line. This will open your application in the browser with the url [http://localhost:3000](http://localhost:3000).
 
 ```powershell
 npm start

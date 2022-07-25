@@ -4,23 +4,516 @@
 <head>
   <title>JavaScript Microsoft Graph SPA</title>
   <link rel="icon" href="data:;base64,="> <!-- Suppress favicon error -->
+  <style>
+    #the-canvas {
+      border: 1px solid black;
+      direction: ltr;
+    }
+
+    .divcss5-right {
+      position: fixed;
+      background: rgb(249 243 243);
+      width: 240px;
+      height: auto;
+      border: 1px solid #0016ff;
+      float: right;
+      top: 100px;
+      left: 930px
+    }
+
+    body,
+    div {
+      margin: 0;
+      padding: 0;
+    }
+
+    #d1 {
+      width: 500px;
+      height: 400px;
+      border: 2px solid #00FFD1;
+    }
+
+    .waku {
+      position: relative;
+      border: 3px solid #000000;
+      width: 180px;
+      height: 160px;
+    }
+
+    .day {
+      position: absolute;
+      bottom: 0px;
+      font-size: 39px;
+      color: #000000;
+    }
+
+    .inkan {
+      position: absolute;
+      z-index: 10;
+
+    }
+
+    .box {
+      float: left;
+      padding: 10px;
+    }
+
+    .deg {
+      width: 300px;
+    }
+
+    .canvas {
+      position: absolute;
+    }
+
+    #canvas {
+      top: 160px;
+      left: 0px;
+      position: absolute;
+    }
+
+    #canvas2 {
+      top: 160px;
+      left: 0px;
+      position: absolute;
+    }
+  </style>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+  <script src="http://mozilla.github.io/pdf.js/build/pdf.js"></script>
+  <script src="http://d3js.org/d3.v3.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.4.0"></script>
+  <script src="https://unpkg.com/downloadjs@1.4.7"></script>
 </head>
 
-<body>
+<body onload="startup()">
   <main id="main-container" role="main" class="container">
     <div id="content" style="display: none;">
-      <h4>Welcome <span id="userName"></span></h4>    
+      <h4 style="width:20%;">Welcome <span id="userName"></span></h4>
+      <input type="text" id="filePath" style="width:60%;" />
+      <button onclick="readPdf()">読取</button>
+      <button onclick="modifyPdf()">保存</button>
+      <div>
+        <button id="prev">前へ</button>
+        <button id="next">次へ</button>
+        &nbsp; &nbsp;
+        <span>Page: <span id="page_num"></span> / <span id="page_count"></span></span>
+      </div>
+      <div>
+        <canvas id="canvas"></canvas>
+        <canvas id="canvas2"></canvas>
+      </div>
+      <div class="divcss5-right">
+        <span>名前</span>
+        <input type="text" id="nameinput" onfocus="makeinkan('nameinput','alertmsg','deg')">
+        <div>
+          <span id="alertmsg"></span>
+        </div>
+        <div class="box">
+          <div class="waku">
+            <input type="range" id="slider" value="1" max="2" min="0.5" step="0.1" style="width:100px;" />
+            <input type="button" value="適用" onclick="addSvg()" />
+            <div id="inkanarea" class="inkan">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <a id="signin" onclick="displayUI(); return false;" href="#">
       <img src="./images/ms-symbollockup_signin_light.png" alt="Sign in with Microsoft" />
     </a>
   </main>
   <script src="https://alcdn.msauth.net/browser/2.1.0/js/msal-browser.min.js"
-    integrity="sha384-EmYPwkfj+VVmL1brMS1h6jUztl4QMS8Qq8xlZNgIT/luzg7MAzDVrRa2JxbNmk/e"
-    crossorigin="anonymous"></script>
+    integrity="sha384-EmYPwkfj+VVmL1brMS1h6jUztl4QMS8Qq8xlZNgIT/luzg7MAzDVrRa2JxbNmk/e" crossorigin="anonymous">
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@microsoft/microsoft-graph-client/lib/graph-js-sdk.js"></script>
   <script src="auth.js"></script>
   <script src="graph.js"></script>
   <script src="ui.js"></script>
+  <script>
+    /**
+     * VIEW PDF
+     */
+    var pdfUrl = '';
+    var pdfId = '';
+    var driveId = '';
+    // Loaded via <script> tag, create shortcut to access PDF.js exports.
+    var pdfjsLib = window['pdfjs-dist/build/pdf'];
+    // The workerSrc property shall be specified.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'http://mozilla.github.io/pdf.js/build/pdf.worker.js';
+    var pdfDoc = null,
+      pageNum = 1,
+      pageRendering = false,
+      pageNumPending = null,
+      scale = 1.5,
+      canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+    canvas2 = document.getElementById('canvas2'),
+      ctx2 = canvas2.getContext('2d');
+    ctx2.lineWidth = 1;
+    ctx2.imageSmoothingEnabled = false;
+
+    function renderPage(num) {
+      pageRendering = true;
+      // Using promise to fetch the page
+      pdfDoc.getPage(num).then(function(page) {
+        var viewport = page.getViewport({
+          scale: scale
+        });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        canvas2.height = viewport.height;
+        canvas2.width = viewport.width;
+        // Render PDF page into canvas context
+        var renderContext = {
+          canvasContext: ctx,
+          viewport: viewport
+        };
+        var renderTask = page.render(renderContext);
+        // Wait for rendering to finish
+        renderTask.promise.then(function() {
+          pageRendering = false;
+          if (pageNumPending !== null) {
+            // New page rendering is pending
+            renderPage(pageNumPending);
+            pageNumPending = null;
+          }
+        });
+      });
+      // Update page counters
+      document.getElementById('page_num').textContent = num;
+    }
+
+    function queueRenderPage(num) {
+      if (pageRendering) {
+        pageNumPending = num;
+      } else {
+        renderPage(num);
+      }
+    }
+
+    function onPrevPage() {
+      if (pageNum <= 1) {
+        return;
+      }
+      pageNum--;
+      queueRenderPage(pageNum);
+    }
+    document.getElementById('prev').addEventListener('click', onPrevPage);
+
+    function onNextPage() {
+      if (pageNum >= pdfDoc.numPages) {
+        return;
+      }
+      pageNum++;
+      queueRenderPage(pageNum);
+    }
+    document.getElementById('next').addEventListener('click', onNextPage);
+    async function viewPdf() {
+      var request = new XMLHttpRequest();
+      var target;
+      request.open("GET", pdfUrl, true);
+      request.send(null);
+      request.onreadystatechange = function() {
+        if (request.readyState == 4) {
+          if (request.status == 200) {
+            target = request.responseText;
+          }
+        }
+      }
+      pdfjsLib.getDocument(pdfUrl).promise.then(function(pdfDoc_) {
+        pdfDoc = pdfDoc_;
+        document.getElementById('page_count').textContent = pdfDoc.numPages;
+        // Initial/first page rendering
+        renderPage(pageNum);
+      });
+    }
+    /**
+     * 印鑑作り
+     */
+    var inkan = null;
+    var w = 100;
+    var h = 100;
+    var svg = null;
+    // 50x50のsvg領域を作る
+    var startup = async function() {
+      svg = d3.select("#inkanarea")
+        .append("svg")
+        .attr("id", "stemp1")
+        .attr("width", w)
+        .attr("height", h)
+        .attr("xmlns", "http://www.w3.org/2000/svg");
+      ensureScope('user.read');
+      const token = await getToken();
+      if (token) {
+        var signInButton = document.getElementById('signin');
+        signInButton.style = "display: none";
+        var content = document.getElementById('content');
+        content.style = "display: block";
+        const user = await getUser();
+        var userName = document.getElementById('userName');
+        userName.innerText = user.displayName;
+      }
+    }
+    var makeinkan = function(inputelid, alertmsgid, inputdegid) {
+      var collback = function() {
+        var inputtext = document.getElementById(inputelid).value;
+        var inputdeg = 0;
+        d3.select("#name").remove();
+        if (inputtext.length > 4) {
+          document.getElementById(alertmsgid).innerText =
+            "4文字以内での入力をお願いします";
+        } else {
+          if (inputtext.length > 0) {
+            document.getElementById(alertmsgid).innerText = "";
+            inkan = svg.append("g")
+              .attr("transform", "translate(0.75,0.75) rotate(" + inputdeg + ",50,50)")
+              .attr("id", "name");
+            inkan.append("circle")
+              .attr("cx", "50")
+              .attr("cy", "50")
+              .attr("stroke", "#FF0000")
+              .attr("stroke-width", "5")
+              .attr("r", "45")
+              .attr("fill-opacity", "0")
+              .attr("stroke-opacity", "0.7");
+            var name = inkan.append("g")
+              .attr("text-anchor", "middle")
+              .attr("fill", "#FF0000")
+              .attr("fill-opacity", "0.7")
+            if (inputtext.length == 1) {
+              name.attr("font-size", "75");
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "77.5")
+                .text(inputtext);
+            }
+            if (inputtext.length == 2) {
+              name.attr("font-size", "47.5");
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "47.5")
+                .text(inputtext[0]);
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "87.5")
+                .text(inputtext[1]);
+            }
+            if (inputtext.length == 3) {
+              name.attr("font-size", "32.5");
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "35")
+                .text(inputtext[0]);
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "65")
+                .text(inputtext[1]);
+              name.append("text")
+                .attr("x", "50")
+                .attr("y", "92.5")
+                .text(inputtext[2]);
+            }
+            if (inputtext.length == 4) {
+              name.attr("font-size", "37.5");
+              name.append("text")
+                .attr("x", "66")
+                .attr("y", "45.5")
+                .text(inputtext[0]);
+              name.append("text")
+                .attr("x", "66")
+                .attr("y", "80.5")
+                .text(inputtext[1]);
+              name.append("text")
+                .attr("x", "33.5")
+                .attr("y", "45.5")
+                .text(inputtext[2]);
+              name.append("text")
+                .attr("x", "33.5")
+                .attr("y", "80.5")
+                .text(inputtext[3]);
+            }
+          }
+        }
+        //フォーカスが文字入力か角度入力の時再度呼び出しする。
+        if (document.activeElement.id == inputelid ||
+          document.activeElement.id == inputdegid) {
+          setTimeout(collback, 10);
+        }
+      }
+      setTimeout(collback, 10);
+    }
+    var DOMURL = window.URL || window.webkitURL || window;
+    let imgWidth = 50;
+    let imgHeight = 50;
+    //在事件外声明需要用到的变量
+    let ax, ay, x = 50,
+      y = 50;
+    let img = new Image();
+    img.onload = function() {
+      drawImageByScale();
+      slider.onchange = function() {
+        var scale = slider.value;
+        drawImageByScale(scale);
+      };
+    }
+
+    function SVGToImage(settings) {
+      let _settings = {
+        svg: null,
+        // Usually all SVG have transparency, so PNG is the way to go by default
+        mimetype: "image/png",
+        quality: 1,
+        width: "auto",
+        height: "auto",
+        outputFormat: "base64"
+      };
+      // Override default settings
+      for (let key in settings) {
+        _settings[key] = settings[key];
+      }
+      return new Promise(function(resolve, reject) {
+        let svgNode;
+        // Create SVG Node if a plain string has been provided
+        if (typeof(_settings.svg) == "string") {
+          // Create a non-visible node to render the SVG string
+          let SVGContainer = document.createElement("div");
+          SVGContainer.style.display = "none";
+          SVGContainer.innerHTML = _settings.svg;
+          svgNode = SVGContainer.firstElementChild;
+        } else {
+          svgNode = _settings.svg;
+        }
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+        let svgXml = new XMLSerializer().serializeToString(svgNode);
+        let svgBase64 = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgXml)));
+        const image = new Image();
+        image.onload = function() {
+          let finalWidth, finalHeight;
+          // Calculate width if set to auto and the height is specified (to preserve aspect ratio)
+          if (_settings.width === "auto" && _settings.height !== "auto") {
+            finalWidth = (this.width / this.height) * _settings.height;
+            // Use image original width
+          } else if (_settings.width === "auto") {
+            finalWidth = this.naturalWidth;
+            // Use custom width
+          } else {
+            finalWidth = _settings.width;
+          }
+          // Calculate height if set to auto and the width is specified (to preserve aspect ratio)
+          if (_settings.height === "auto" && _settings.width !== "auto") {
+            finalHeight = (this.height / this.width) * _settings.width;
+            // Use image original height
+          } else if (_settings.height === "auto") {
+            finalHeight = this.naturalHeight;
+            // Use custom height
+          } else {
+            finalHeight = _settings.height;
+          }
+          // Define the canvas intrinsic size
+          canvas.width = finalWidth;
+          canvas.height = finalHeight;
+          // Render image in the canvas
+          context.drawImage(this, 0, 0, finalWidth, finalHeight);
+          if (_settings.outputFormat == "blob") {
+            // Fullfil and Return the Blob image
+            canvas.toBlob(function(blob) {
+              resolve(blob);
+            }, _settings.mimetype, _settings.quality);
+          } else {
+            // Fullfil and Return the Base64 image
+            resolve(canvas.toDataURL(_settings.mimetype, _settings.quality));
+          }
+        };
+        // Load the SVG in Base64 to the image
+        image.src = svgBase64;
+      });
+    }
+
+    function addSvg() {
+      SVGToImage({
+        svg: document.getElementById("stemp1").outerHTML,
+        mimetype: "image/png",
+        width: 250,
+        quality: 1
+      }).then(function(base64image) {
+        img.src = base64image;
+      }).catch(function(err) {
+        console.log(err);
+      });
+    }
+
+    function drawImageByScale() {
+      imgWidth = 50 * slider.value;
+      imgHeight = 50 * slider.value;
+      var dx = (canvas2.width - imgWidth) / 2;
+      var dy = (canvas2.height - imgHeight) / 2;
+      ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+      ctx2.drawImage(img, x, y, imgWidth, imgHeight);
+    }
+    //添加鼠标按下事件
+    canvas2.onmousedown = function(e) {
+      // if (e.layerX >= x &&  e.layerX <= x + imgWidth && e.layerY >= y && e.layerY <= y + imgHeight) {
+      //按下后可移动
+      canvas2.onmousemove = function(e) {
+        x = e.layerX;
+        y = e.layerY;
+        //先清除之前的然后重新绘制
+        ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+        ctx2.drawImage(img, x - imgWidth / 2, y - imgHeight / 2, imgWidth, imgHeight);
+      };
+      //}
+      //鼠标抬起清除绑定事件
+      canvas2.onmouseup = function() {
+        canvas2.onmousemove = null;
+        canvas2.onmouseup = null;
+      };
+    }
+    /**
+     * PDFを編集
+     */
+    const {
+      degrees,
+      PDFDocument,
+      rgb,
+      StandardFonts
+    } = PDFLib
+
+    async function modifyPdf() {
+      // Fetch an existing PDF document
+      const existingPdfBytes = await fetch(pdfUrl).then(res => res.arrayBuffer())
+      // Load a PDFDocument from the existing PDF bytes
+      const pdfDoc = await PDFDocument.load(existingPdfBytes)
+      // Embed the Helvetica font
+      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      // Get the first page of the document
+      const pages = pdfDoc.getPages()
+      const firstPage = pages[pageNum - 1]
+      // Get the width and height of the first page
+      const {
+        width,
+        height
+      } = firstPage.getSize()
+      const pngImageBytes = await fetch(img.src).then((res) => res.arrayBuffer())
+      const pngImage = await pdfDoc.embedPng(pngImageBytes)
+      const pngDims = pngImage.scale(0.66 * slider.value * 0.2)
+      // Draw a string of text diagonally across the first page
+      firstPage.drawImage(pngImage, {
+        // x: firstPage.getWidth() - pngDims.width / 2,
+        // y: firstPage.getHeight() + pngDims.height / 2,
+        x: x / 1.5 - pngDims.width / 2,
+        y: firstPage.getHeight() - y / 1.5 - pngDims.height / 2,
+        width: pngDims.width,
+        height: pngDims.height,
+      })
+      // Serialize the PDFDocument to bytes (a Uint8Array)
+      let pdfBytes = await pdfDoc.save()
+      let pdfblob = new Blob([pdfBytes.buffer], {type: "application/pdf"})
+      await uploadFile(pdfblob)
+      await readPdf()
+      // Trigger the browser to download the PDF document
+      // download(pdfBytes, "pdf-lib_modification_example.pdf", "application/pdf");
+    }
+  </script>
 </body>
 </html>

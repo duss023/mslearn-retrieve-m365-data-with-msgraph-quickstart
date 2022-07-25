@@ -1,9 +1,9 @@
 //MSAL configuration
 const msalConfig = {
     auth: {
-        clientId: '<your client ID here>',
+        clientId: 'a5a7ff24-c72c-4fee-9cc3-65f65fa8d77f',
         // comment out if you use a multi-tenant AAD app
-        authority: 'https://login.microsoftonline.com/<your directory ID here>',
+        authority: 'https://login.microsoftonline.com/a21e51f3-4e99-4ad9-8f20-46bc5ad8bb25',
         redirectUri: 'http://localhost:8080'
     }
 };
@@ -25,8 +25,9 @@ async function signIn() {
 async function getToken() {
     let account = sessionStorage.getItem('msalAccount');
     if (!account) {
-        throw new Error(
-            'User info cleared from session. Please sign out and sign in again.');
+            // throw new Error(
+            //     'User info cleared from session. Please sign out and sign in again.');
+        return null;
     }
     try {
         // First, attempt to get the token silently
